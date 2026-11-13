@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Multi-Deteksi Computer Vision (1 Port)</title><link rel="icon" href="data:,">
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #e2e8f0; margin: 0; padding: 20px; text-align: center; color: #1e293b; }
+        h1 { font-size: 1.8rem; color: #0f172a; margin-bottom: 5px; }
+        h2 { font-size: 1.1rem; color: #475569; margin-top: 0; }
+        
+        .tab-bar { display: flex; justify-content: center; gap: 12px; margin: 25px 0; flex-wrap: wrap; }
+        .tab-btn { background: #cbd5e1; color: #334155; padding: 12px 24px; font-weight: bold; border-radius: 8px; border: none; cursor: pointer; font-size: 15px; transition: 0.2s; }
+        .tab-btn.active { background: #2563eb; color: white; box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35); }
+
+        .container { display: flex; flex-wrap: wrap; justify-content: center; gap: 25px; max-width: 1500px; margin: auto; }
+        
+        .video-box { 
+            background: white; padding: 25px; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.08); 
+            width: 100%; max-width: 900px; text-align: left; border-top: 5px solid #10b981;
+        } 
+        .card { 
+            background: white; padding: 25px; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.08); 
+            width: 100%; max-width: 480px; text-align: left; border-top: 5px solid #2563eb;
+        } 
+        
+        label { font-weight: bold; font-size: 14px; color: #334155; display: block; margin-bottom: 6px; }
+        input[type="text"], select { width: 100%; padding: 11px; margin: 6px 0 16px 0; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 15px; background: #f8fafc; }
+        button { background: #2563eb; color: white; padding: 12px; border: none; border-radius: 8px; cursor: pointer; width: 100%; font-weight: bold; font-size: 15px; }
+        button:hover { background: #1d4ed8; }
+        
+        .drop-zone {
+            border: 2px dashed #64748b; border-radius: 8px; padding: 25px; text-align: center;
+            background: #f8fafc; cursor: pointer; margin-bottom: 16px; transition: 0.2s;
+        }
+        .drop-zone.dragover { background: #e0f2fe; border-color: #0284c7; }
+        .drop-zone p { margin: 0; color: #475569; font-size: 14px; font-weight: 600; }
+
+        .btn-delete { background: #ef4444; width: auto; padding: 6px 12px; font-size: 13px; }
+        .btn-delete:hover { background: #dc2626; }
+
+        .btn-edit { background: #f59e0b; width: auto; padding: 6px 12px; font-size: 13px; color: white; margin-right: 5px; }
+        .btn-edit:hover { background: #d97706; }
+        
+        ul { padding-left: 0; list-style: none; max-height: 250px; overflow-y: auto; margin: 0; }
+        li { background: #f8fafc; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #e2e8f0; padding: 10px 14px; border-radius: 8px; }
+        
+        #videoStream { width: 100%; height: auto; max-height: 600px; border-radius: 8px; border: 2px solid #e2e8f0; background: #000; }
+        .badge { display: inline-block; background: #e0f2fe; color: #0369a1; padding: 6px 14px; border-radius: 20px; font-weight: bold; font-size: 13px; margin-bottom: 15px; }
+
+        #editModal { display: none; position: fixed; z-index: 999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 30px; border-radius: 12px; width: 100%; max-width: 400px; text-align: left; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+    </style>
+</head>
+<body>
+    <h1>Sistem Multi-Deteksi Computer Vision (1 Port)</h1>
+    <h2>Dhika Bagas Whisnu Aji, S.Kom.</h2>
+
+    <div class="tab-bar">
+        <form action="/set_tab" method="POST"><input type="hidden" name="tab" value="wajah"><button type="submit" class="tab-btn {% if active_tab == 'wajah' %}active{% endif %}">👤 1. Pengenalan Wajah</button></form>
+        <form action="/set_tab" method="POST"><input type="hidden" name="tab" value="benda"><button type="submit" class="tab-btn {% if active_tab == 'benda' %}active{% endif %}">📦 2. Deteksi Benda</button></form>
+        <form action="/set_tab" method="POST"><input type="hidden" name="tab" value="video"><button type="submit" class="tab-btn {% if active_tab == 'video' %}active{% endif %}">🎬 3. Video & Plat Nomor</button></form>
+    </div>
+
+    <div class="container">
+        <div class="video-box">
+            <div class="badge">Menu Aktif: {{ active_tab | upper }}</div>
+            
+            {% if active_tab != 'video' %}
+            <form action="/set_camera" method="POST" style="margin-bottom:15px; display:flex; gap:10px;">
+                <select name="camera_id" style="flex:1; margin:0;">
+                    <option value="0" {% if active_cam == 0 %}selected{% endif %}>Webcam Internal (0)</option>
+                    <option value="1" {% if active_cam == 1 %}selected{% endif %}>Kamera USB (1)</option>
+                </select>
+                <button type="submit" style="width:auto; padding:11px 20px; margin:0;">Ganti Kamera</button>
+            </form>
+            {% else %}
+            <form action="/set_video" method="POST" style="margin-bottom:15px; display:flex; gap:10px;">
+                <select name="nama_video" style="flex:1; margin:0;">
+                    {% for vid in daftar_video %}<option value="{{ vid }}">{{ vid }}</option>{% endfor %}
+                </select>
+                <button type="submit" style="width:auto; padding:11px 20px; margin:0; background:#10b981;">Putar Video</button>
+            </form>
+            {% endif %}
+
+            <img id="videoStream" src="{{ url_for('video_feed') }}" />
+
+            {% if active_tab == 'wajah' %}
+            <div style="margin-top:20px; border-top:1px solid #cbd5e1; padding-top:15px;">
+                <h4 style="margin:0 0 10px 0; color:#1e293b; font-size:15px;">📸 Snapshot Wajah Instan</h4>
+                <label>Nama:</label><input type="text" id="snapName" placeholder="Nama Lengkap">
+                <label>Jabatan:</label><input type="text" id="snapJabatan" placeholder="Jabatan">
+                <label>Jenis Kelamin:</label>
+                <select id="snapGender"><option value="Laki-laki">Laki-laki</option><option value="Perempuan">Perempuan</option></select>
+                <button type="button" style="background:#0d9488;" onclick="takeSnapshot()">Potret & Simpan Wajah</button>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            {% if active_tab == 'wajah' %}
+                <h3>➕ Tambah Data Wajah</h3>
+                <form action="/upload_orang" method="POST" enctype="multipart/form-data">
+                    <label>Nama:</label><input type="text" name="nama" required placeholder="Nama Lengkap">
+                    <label>Jabatan:</label><input type="text" name="jabatan" placeholder="Jabatan">
+                    <label>Kelamin:</label>
+                    <select name="jenis_kelamin"><option value="Laki-laki">Laki-laki</option><option value="Perempuan">Perempuan</option></select>
+                    
+                    <label>File Foto:</label>
+                    <div class="drop-zone" id="dropZoneFoto">
+                        <p>📁 Seret & Letakkan foto di sini atau klik</p>
+                        <input type="file" name="foto" id="fileFoto" accept="image/*" required style="display:none;">
+                    </div>
+                    <button type="submit">Upload & Simpan</button>
+                </form>
+                <hr style="margin:20px 0; border:0; border-top:1px solid #cbd5e1;">
+                <h3>📋 Daftar Wajah</h3>
+                <ul>
+                    {% for item in daftar_orang %}
+                        <li>
+                            <div><strong>{{ item.nama }}</strong><br><small style="color:#64748b;">{{ item.jabatan }} ({{ item.jenis_kelamin }})</small></div>
+                            <div style="display: flex; gap: 5px;">
+                                <button type="button" class="btn-edit" onclick="openEditModal('{{ item.nama }}', '{{ item.jabatan }}', '{{ item.jenis_kelamin }}')">Edit</button>
+                                <form action="/delete/orang/{{ item.filename }}" method="POST" style="margin:0;" onsubmit="return confirm('Hapus?');"><button type="submit" class="btn-delete">Hapus</button></form>
+                            </div>
+                        </li>
+                    {% endfor %}
+                </ul>
+
+            {% elif active_tab == 'benda' %}
+                <h3>➕ Upload Referensi Benda</h3>
+                <form action="/upload_benda" method="POST" enctype="multipart/form-data">
+                    <label>Nama Benda:</label><input type="text" name="nama_benda" required placeholder="Nama Objek">
+                    
+                    <label>File Foto Benda:</label>
+                    <div class="drop-zone" id="dropZoneBenda">
+                        <p>📁 Seret & Letakkan foto benda di sini atau klik</p>
+                        <input type="file" name="foto_benda" id="fileBenda" accept="image/*" required style="display:none;">
+                    </div>
+                    <button type="submit" style="background:#10b981;">Upload Benda</button>
+                </form>
+                <hr style="margin:20px 0; border:0; border-top:1px solid #cbd5e1;">
+                <h3>📋 Daftar Benda</h3>
+                <ul>
+                    {% for benda in daftar_benda %}
+                        <li>
+                            <div><strong>{{ benda }}</strong></div>
+                            <form action="/delete/benda/{{ benda }}" method="POST" style="margin:0;" onsubmit="return confirm('Hapus?');"><button type="submit" class="btn-delete">Hapus</button></form>
+                        </li>
+                    {% endfor %}
+                </ul>
+
+            {% else %}
+                <h3>🎬 Upload File Video</h3>
+                <form action="/upload_video" method="POST" enctype="multipart/form-data">
+                    <label>File Video (.mp4 / .avi):</label>
+                    <div class="drop-zone" id="dropZoneVideo">
+                        <p>📁 Seret & Letakkan file video di sini atau klik</p>
+                        <input type="file" name="file_video" id="fileVideo" accept="video/*" required style="display:none;">
+                    </div>
+                    <button type="submit" style="background:#0284c7;">Upload Video</button>
+                </form>
+                <hr style="margin:20px 0; border:0; border-top:1px solid #cbd5e1;">
+                <h3>📋 Daftar Video</h3>
+                <ul>
+                    {% for vid in daftar_video %}
+                        <li>
+                            <div><strong>{{ vid }}</strong></div>
+                            <form action="/delete/video/{{ vid }}" method="POST" style="margin:0;" onsubmit="return confirm('Hapus?');"><button type="submit" class="btn-delete">Hapus</button></form>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Modal Form Edit Data & Foto Wajah -->
+    <div id="editModal">
+        <div class="modal-content">
+            <h3>✏️ Edit Data & Foto Wajah</h3>
+            <form action="/edit_orang" method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="nama_lama" id="editNamaLama">
+                <label>Nama Baru:</label>
+                <input type="text" name="nama_baru" id="editNamaBaru" required>
+                <label>Jabatan:</label>
+                <input type="text" name="jabatan" id="editJabatan" required>
+                <label>Jenis Kelamin:</label>
+                <select name="jenis_kelamin" id="editGender">
+                    <option value="Laki-laki">Laki-laki</option>
+                    <option value="Perempuan">Perempuan</option>
+                </select>
+                <label>Ganti Foto Baru (Opsional):</label>
+                <input type="file" name="foto_baru" accept="image/*" style="margin-bottom: 15px; background: #f8fafc; padding: 8px; border: 1.5px solid #cbd5e1; border-radius: 8px; width: 100%;">
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                    <button type="submit" style="background:#10b981;">Simpan Perubahan</button>
+                    <button type="button" style="background:#64748b;" onclick="closeEditModal()">Batal</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openEditModal(nama, jabatan, gender) {
+            document.getElementById('editNamaLama').value = nama;
+            document.getElementById('editNamaBaru').value = nama;
+            document.getElementById('editJabatan').value = jabatan === '-' ? '' : jabatan;
+            document.getElementById('editGender').value = gender;
+            document.getElementById('editModal').style.display = 'flex';
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+
+        function setupDropZone(dropZoneId, fileInputId) {
+            const dropZone = document.getElementById(dropZoneId);
+            const fileInput = document.getElementById(fileInputId);
+            if(!dropZone || !fileInput) return;
+
+            dropZone.addEventListener('click', () => fileInput.click());
+            dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                if (e.dataTransfer.files.length > 0) {
+                    fileInput.files = e.dataTransfer.files;
+                    dropZone.querySelector('p').innerText = "File terpilih: " + e.dataTransfer.files[0].name;
+                }
+            });
+            fileInput.addEventListener('change', () => {
+                if (fileInput.files.length > 0) {
+                    dropZone.querySelector('p').innerText = "File terpilih: " + fileInput.files[0].name;
+                }
+            });
+        }
+
+        setupDropZone('dropZoneFoto', 'fileFoto');
+        setupDropZone('dropZoneBenda', 'fileBenda');
+        setupDropZone('dropZoneVideo', 'fileVideo');
+
+        function takeSnapshot() {
+            let name = document.getElementById('snapName').value.trim();
+            let jabatan = document.getElementById('snapJabatan').value.trim();
+            let gender = document.getElementById('snapGender').value;
+
+            if (!name) { 
+                alert("Harap masukkan nama terlebih dahulu!"); 
+                return; 
+            }
+
+            fetch('/save_snapshot', {
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    nama: name, 
+                    jabatan: jabatan, 
+                    jenis_kelamin: gender 
+                })
+            })
+            .then(res => res.json())
+            .then(data => { 
+                if(data.status === 'success') {
+                    alert("Berhasil memotret dan menyimpan wajah untuk " + name + "!");
+                    window.location.reload(); 
+                } else {
+                    alert("Gagal menyimpan foto: " + (data.message || "Kesalahan server"));
+                }
+            })
+            .catch(error => {
+                console.error('Error Fetch:', error);
+                alert("Terjadi kesalahan koneksi saat menyimpan foto.");
+            });
+        }
+    </script>
+</body>
+</html>
